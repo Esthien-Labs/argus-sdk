@@ -196,6 +196,8 @@ class ActuatorCommand:
         envelope_state: Envelope state that produced this command.
         effective_confidence: C_eff = confidence * reliability, rounded to 6dp.
         vetoed_by_supervisor: True if the hard-limit supervisor clipped this command.
+        refusal_reason: Set when the envelope refused the proposal outright; None
+            when the command was produced by normal envelope evaluation.
     """
 
     intent: str
@@ -204,6 +206,82 @@ class ActuatorCommand:
     envelope_state: EnvelopeState
     effective_confidence: float
     vetoed_by_supervisor: bool
+    refusal_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ActionProvenance:
+    """Origin of an AI proposal. Mandatory on every proposal.
+
+    Attributes:
+        model_id: Identifier of the model or agent that produced the proposal.
+        model_version: Version of that model or agent.
+        profile_id: Identifier of the authority profile the proposal was issued
+            against.
+        source: Where the proposal came from, for example a hosted agent, a local
+            model, or a named integration.
+        issued_at: Unix timestamp of the proposal.
+        attestation: Optional integrity or attestation digest supplied by the
+            producer.
+    """
+
+    model_id: str
+    model_version: str
+    profile_id: str
+    source: str
+    issued_at: float
+    attestation: str | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("model_id", "model_version", "profile_id", "source"):
+            if not getattr(self, name):
+                raise ValueError(f"provenance {name} must not be empty")
+        if not math.isfinite(self.issued_at):
+            raise ValueError("provenance issued_at must be finite")
+
+
+@dataclass(frozen=True)
+class ProposedAction:
+    """An untrusted action proposal from an AI system.
+
+    A proposal is not a command. It carries provenance and reaches an actuator
+    only through the safety envelope.
+
+    Attributes:
+        intent: Proposed intent class label.
+        confidence: Classifier posterior probability in [0, 1].
+        provenance: Origin of the proposal.
+    """
+
+    intent: str
+    confidence: float
+    provenance: ActionProvenance
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(f"confidence {self.confidence} outside [0, 1]")
+
+
+@dataclass(frozen=True)
+class AuthorityScope:
+    """Declared authority for AI proposals reaching one envelope.
+
+    Attributes:
+        profile_id: Authority profile the envelope enforces. Proposals issued
+            against a different profile are refused.
+        authorized_model_ids: Model identifiers allowed to propose. An empty
+            tuple means any model identity is accepted, and provenance is still
+            carried on the command path.
+    """
+
+    profile_id: str
+    authorized_model_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.profile_id:
+            raise ValueError("profile_id must not be empty")
+        if len(set(self.authorized_model_ids)) != len(self.authorized_model_ids):
+            raise ValueError("authorized_model_ids must be unique")
 
 
 # Default nominal torque/velocity requests for the built-in intent classes.
@@ -230,17 +308,27 @@ class ConfidenceCoupledSafetyEnvelope:
 
     Args:
         cfg: Safety-envelope configuration.
+        authority: Declared authority scope for AI proposals. When omitted, any
+            proposal is evaluated and its provenance is still carried on the
+            command path.
     """
 
-    def __init__(self, cfg: SafetyConfig) -> None:
+    def __init__(self, cfg: SafetyConfig, authority: AuthorityScope | None = None) -> None:
         self._cfg = cfg
+        self._authority = authority
         self._low_streak = 0
         self._state = EnvelopeState.SAFE_HALT
+        self._refusals = 0
 
     @property
     def state(self) -> EnvelopeState:
         """Current envelope state."""
         return self._state
+
+    @property
+    def refusals(self) -> int:
+        """Number of proposals refused by the authority scope since construction."""
+        return self._refusals
 
     @property
     def low_streak(self) -> int:
@@ -307,6 +395,65 @@ class ConfidenceCoupledSafetyEnvelope:
             requested_velocity_rad_s,
             known_intent=True,
         )
+
+    def evaluate_proposal(
+        self,
+        proposal: ProposedAction,
+        quality: SignalQuality,
+        requested_torque_nm: float | None = None,
+        requested_velocity_rad_s: float | None = None,
+    ) -> ActuatorCommand:
+        """Evaluate one untrusted proposal from an AI system.
+
+        A proposal is not a command. Every proposal carries provenance and is
+        checked against the envelope's authority scope before it can produce a
+        command. A refused proposal produces a SAFE_HALT command and never
+        reaches the actuator path.
+
+        Args:
+            proposal: Untrusted action proposal with provenance.
+            quality: Signal quality assessment for the same window.
+            requested_torque_nm: Nominal torque to apply in NOMINAL state. When
+                omitted, the built-in nominal request table is used.
+            requested_velocity_rad_s: Nominal velocity to apply in NOMINAL state.
+
+        Returns:
+            ActuatorCommand bounded by the current envelope state and hard limits.
+
+        Raises:
+            ValueError: If supplied request values are not finite.
+        """
+        refusal = self._check_authority(proposal)
+        if refusal is not None:
+            self._refusals += 1
+            self._state = EnvelopeState.SAFE_HALT
+            return ActuatorCommand(
+                intent=proposal.intent,
+                torque_nm=0.0,
+                velocity_rad_s=0.0,
+                envelope_state=EnvelopeState.SAFE_HALT,
+                effective_confidence=round(proposal.confidence * quality.reliability, 6),
+                vetoed_by_supervisor=False,
+                refusal_reason=refusal,
+            )
+
+        prediction = Prediction(intent=proposal.intent, confidence=proposal.confidence)
+        if requested_torque_nm is None or requested_velocity_rad_s is None:
+            return self.evaluate(prediction, quality)
+        return self.evaluate_with_request(
+            prediction, quality, requested_torque_nm, requested_velocity_rad_s
+        )
+
+    def _check_authority(self, proposal: ProposedAction) -> str | None:
+        """Return a refusal reason, or None when the proposal is authorized."""
+        if self._authority is None:
+            return None
+        if proposal.provenance.profile_id != self._authority.profile_id:
+            return "profile_mismatch"
+        allowed = self._authority.authorized_model_ids
+        if allowed and proposal.provenance.model_id not in allowed:
+            return "model_not_authorized"
+        return None
 
     def _step(
         self,

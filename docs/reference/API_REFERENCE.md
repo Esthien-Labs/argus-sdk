@@ -16,7 +16,7 @@ The public surface has four groups:
 
 | Group | Module | Purpose |
 |---|---|---|
-| Safety envelope | `argus.safety` | Confidence-coupled safety envelope and quality gate |
+| Safety envelope | `argus.safety` | Confidence-coupled safety envelope, proposal contract, and sensor health gate |
 | Profile compiler | `argus.compiler` | Partner profile schema and compilation |
 | Capability protocol | `argus.protocol` | Signed capability manifest negotiation |
 | C ABI types | `argus.abi` | C-compatible structures and enums |
@@ -98,6 +98,158 @@ Frozen dataclass. Bounded command emitted for one decision window.
 | `envelope_state` | EnvelopeState | State that produced the command |
 | `effective_confidence` | float | `C_eff = confidence * reliability` |
 | `vetoed_by_supervisor` | bool | True if the hard-limit supervisor clipped it |
+| `refusal_reason` | str or None | Set when the envelope refused a proposal outright |
+
+## 2A. The proposal contract
+
+A proposal from an AI system is not a command. The envelope is the only path from
+proposal to actuator, and every proposal carries provenance.
+
+### `ActionProvenance`
+
+Frozen dataclass, mandatory on every proposal.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `model_id` | str | Identifier of the model or agent that produced the proposal |
+| `model_version` | str | Version of that model or agent |
+| `profile_id` | str | Authority profile the proposal was issued against |
+| `source` | str | Where the proposal came from |
+| `issued_at` | float | Unix timestamp |
+| `attestation` | str or None | Optional integrity or attestation digest |
+
+Raises `ValueError` if any identity field is empty or `issued_at` is not finite.
+
+### `ProposedAction`
+
+Frozen dataclass: `intent`, `confidence` in `[0, 1]`, `provenance`.
+
+### `AuthorityScope`
+
+Frozen dataclass declaring the authority one envelope enforces:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `profile_id` | str | Authority profile enforced by the envelope |
+| `authorized_model_ids` | tuple[str, ...] | Model identities allowed to propose; empty means any |
+
+### Evaluating a proposal
+
+```python
+envelope.evaluate_proposal(
+    proposal,
+    quality,
+    requested_torque_nm=None,
+    requested_velocity_rad_s=None,
+)
+```
+
+A proposal whose profile does not match the scope, or whose model is not authorized,
+is refused: the envelope enters `SAFE_HALT`, the returned command has zero torque and
+velocity, `refusal_reason` is set, and `envelope.refusals` increments. A refusal does
+not advance the low-confidence streak. Recovery afterwards requires one window at or
+above `t_high`, as with any other exit from `SAFE_HALT`.
+
+```python
+from argus import (
+    ActionProvenance,
+    AuthorityScope,
+    ConfidenceCoupledSafetyEnvelope,
+    ProposedAction,
+    SafetyConfig,
+    SignalQuality,
+)
+
+authority = AuthorityScope(
+    profile_id="robot_diff_drive_ros2_v0",
+    authorized_model_ids=("planner-v3",),
+)
+envelope = ConfidenceCoupledSafetyEnvelope(SafetyConfig(), authority=authority)
+
+proposal = ProposedAction(
+    intent="knee_flexion",
+    confidence=0.92,
+    provenance=ActionProvenance(
+        model_id="planner-v3",
+        model_version="1.4.2",
+        profile_id="robot_diff_drive_ros2_v0",
+        source="hosted_agent",
+        issued_at=1730000000.0,
+    ),
+)
+
+command = envelope.evaluate_proposal(
+    proposal,
+    SignalQuality(reliability=0.95, flatline_channels=(), artifact_detected=False),
+    requested_torque_nm=20.0,
+    requested_velocity_rad_s=2.0,
+)
+if command.refusal_reason is not None:
+    ...  # the proposal was refused; the actuator receives nothing
+```
+
+## 2B. Sensor health and out-of-distribution gating
+
+`SensorHealthGate` declares a sensor's operating envelope and assesses windows
+against it. It provides the out-of-distribution mitigation that AI functional-safety
+standards call for, as a declared, deterministic, inspectable check rather than a
+learned one.
+
+```python
+SensorHealthGate(
+    flatline_std=5.0,
+    clip_ratio=0.98,
+    ood_z_threshold=4.0,
+    ood_channel_fraction=0.25,
+    artifact_common_mode_ratio=2.5,
+)
+```
+
+| Member | Description |
+|---|---|
+| `declare_reference(reference)` | Declare the reference distribution from a reference window set; required before `assess` |
+| `assess(window)` | Assess one window and return a `SensorHealth` |
+
+`SensorHealth` carries `reliability`, `flatline_channels`, `artifact_detected`,
+`out_of_distribution`, `ood_score`, and `flags`. Three penalties compose
+multiplicatively: each flatlined channel removes 25% of the remaining reliability,
+saturation multiplies by 0.6, a motion artifact multiplies by 0.3, and
+out-of-distribution input multiplies by `1 - ood_score`.
+
+`SensorHealth.as_signal_quality()` returns the equivalent `SignalQuality`, so the
+result plugs into the existing envelope unchanged.
+
+## 2C. The wedge containment benchmark
+
+`argus.regression.wedge` runs the containment demonstration that separates the
+enforcement boundary from a library. It runs two arms over the same declared
+scenario and fault corpus:
+
+- **baseline**: the controller's output goes to the actuator.
+- **argus**: the controller's output enters the envelope as a proposal and only
+  the envelope's output reaches the actuator.
+
+The controller is a declared nearest-centroid linear policy whose features are
+per-channel signal means. That choice creates the documented failure mode of
+learned controllers: a motion pattern is a zero-mean alternating signal, so its
+per-channel mean is zero, and a dead sensor's per-channel mean is also zero. The
+controller cannot distinguish "no signal" from "zero-mean motion", so on a dead
+sensor it keeps proposing motion with high confidence.
+
+```python
+from argus.regression.wedge import run_wedge_benchmark, write_wedge_report
+
+result = run_wedge_benchmark()
+paths = write_wedge_report(result, out_dir)
+```
+
+The report records, per declared fault: unsafe motion commands issued while the
+sensor was faulted, for both arms; the first window at which the envelope reached
+`SAFE_HALT`; and false stops, meaning clean windows where the boundary suppressed
+a motion command the baseline would have issued.
+
+This is `digital_source_verification` evidence on generated data. It establishes no
+hardware, silicon, power, thermal, field, or comparative product claim.
 
 ### `ConfidenceCoupledSafetyEnvelope`
 
