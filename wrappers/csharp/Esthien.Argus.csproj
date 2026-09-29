@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Esthien.Argus</AssemblyName>
+    <RootNamespace>Esthien.Argus</RootNamespace>
+    <Version>0.7.4</Version>
+    <Authors>Esthien Labs</Authors>
+    <Description>Argus SDK - Safety-supervised inference for physical systems</Description>
+    <PackageId>Esthien.Argus</PackageId>
+    <PackageTags>argus;safety;inference;robotics</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="lib\argus.dll" Condition="Exists('lib\argus.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="lib\libargus.so" Condition="Exists('lib\libargus.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="lib\libargus.dylib" Condition="Exists('lib\libargus.dylib')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

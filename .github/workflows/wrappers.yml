@@ -1,0 +1,58 @@
+name: Argus SDK wrappers
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust wrapper
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install libclang for bindgen
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+      - name: Build native library
+        run: python scripts/build_native_library.py
+      - name: Stage native library for the crate
+        run: |
+          mkdir -p wrappers/rust/lib
+          cp src/argus/abi/libargus.so wrappers/rust/lib/
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the Rust wrapper
+        run: cargo build --manifest-path wrappers/rust/Cargo.toml --verbose
+
+  go:
+    name: Go wrapper (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Build native library
+        run: python scripts/build_native_library.py
+      - name: Stage native library for the module
+        run: |
+          mkdir -p wrappers/go/lib
+          cp src/argus/abi/libargus.* wrappers/go/lib/
+        shell: bash
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.21'
+      - name: Build the Go wrapper
+        working-directory: wrappers/go
+        run: go build ./...

@@ -1,0 +1,296 @@
+name: Argus SDK public release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 0.7.4)'
+        required: true
+        default: '0.7.4'
+      test_pypi:
+        description: 'Upload to TestPyPI instead of PyPI'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  verify-host:
+    name: Verify ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            label: Windows x64
+            runner: windows-2025
+          - id: windows-arm64
+            label: Windows arm64
+            runner: windows-11-vs2026-arm
+          - id: macos-x64
+            label: macOS x64
+            runner: macos-15-intel
+          - id: macos-arm64
+            label: macOS arm64
+            runner: macos-15
+          - id: linux-x64
+            label: Linux x64
+            runner: ubuntu-24.04
+          - id: linux-arm64
+            label: Linux arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install the candidate and release checks
+        run: python -m pip install --upgrade pip && python -m pip install . "pytest>=8"
+      - name: Verify public Python and CLI interfaces
+        run: |
+          python -c "import argus; assert argus.__version__ == '${{ inputs.version }}'"
+          argus --version
+          argus runtime-info
+      - name: Run release-contract and regression checks
+        run: |
+          python -m pytest tests/unit/test_release_contract.py tests/integration/test_regression_eval_command.py
+          argus regression-eval --sample --out out/host-matrix
+      - name: Run malformed-input fuzz checks
+        run: python -m pytest tests/unit/test_fuzz_regression_eval.py -q
+      - name: Generate structured host validation record
+        run: python scripts/validate_host.py --out out/host-validation
+      - name: Upload host validation record
+        uses: actions/upload-artifact@v7
+        with:
+          name: host-validation-${{ matrix.id }}
+          path: out/host-validation/host_validation_record.json
+          if-no-files-found: error
+
+  build-python:
+    name: Build Python candidate artifacts
+    needs: verify-host
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install build frontend and dependency auditor
+        run: python -m pip install --upgrade pip "setuptools>=83" build==1.6.1 pip-audit==2.10.1 twine==6.1.0
+      - name: Audit resolved Python dependencies
+        run: |
+          python -m pip install .
+          python -m pip_audit --local --strict --vulnerability-service osv
+      - name: Generate resolved SBOM
+        run: |
+          New-Item -ItemType Directory -Path out/release-candidate -Force | Out-Null
+          python -m pip_audit --local --format cyclonedx-json --output out/release-candidate/SBOM-resolved.cdx.json
+        shell: pwsh
+      - name: Collect host validation records
+        uses: actions/download-artifact@v7
+        with:
+          pattern: host-validation-*
+          path: out/host-records
+          merge-multiple: false
+      - name: Build and inventory artifacts
+        run: python scripts/build_release.py --out out/release-candidate --host-records-dir out/host-records
+      - name: Sign Python candidate artifacts
+        run: |
+          python -m pip install sigstore==4.3.0
+          python -m sigstore sign out/release-candidate/esthien_argus_sdk-${{ inputs.version }}-py3-none-any.whl --signature out/release-candidate/esthien_argus_sdk-${{ inputs.version }}-py3-none-any.whl.sig --certificate out/release-candidate/esthien_argus_sdk-${{ inputs.version }}-py3-none-any.whl.crt
+          python -m sigstore sign out/release-candidate/SBOM-resolved.cdx.json --signature out/release-candidate/SBOM-resolved.cdx.json.sig --certificate out/release-candidate/SBOM-resolved.cdx.json.crt
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          $repo = if ("${{ inputs.test_pypi }}" -eq "true") { "testpypi" } else { "pypi" }
+          python -m twine upload --repository $repo --verbose out/release-candidate/esthien_argus_sdk-${{ inputs.version }}-py3-none-any.whl
+        shell: pwsh
+      - name: Upload Python candidate bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: argus-sdk-v${{ inputs.version }}-python-candidate
+          path: out/release-candidate/
+          if-no-files-found: error
+
+  build-native-candidate:
+    name: Build ${{ matrix.label }} candidate
+    needs: verify-host
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            label: Windows x64
+            runner: windows-2025
+            os_type: windows
+          - id: windows-arm64
+            label: Windows arm64
+            runner: windows-11-vs2026-arm
+            os_type: windows
+          - id: macos-x64
+            label: macOS x64
+            runner: macos-15-intel
+            os_type: macos
+          - id: macos-arm64
+            label: macOS arm64
+            runner: macos-15
+            os_type: macos
+          - id: linux-x64
+            label: Linux x64
+            runner: ubuntu-24.04
+            os_type: linux
+          - id: linux-arm64
+            label: Linux arm64
+            runner: ubuntu-24.04-arm
+            os_type: linux
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install native packaging tool
+        run: python -m pip install --upgrade pip && python -m pip install . pyinstaller==6.22.3
+      - name: Build native CLI executable
+        run: python -m PyInstaller --noconfirm --clean --distpath out/standalone --workpath out/pyinstaller-work argus.spec
+      - name: Verify native CLI executable
+        shell: pwsh
+        run: |
+          $executableName = if ($env:RUNNER_OS -eq 'Windows') { 'argus.exe' } else { 'argus' }
+          $executable = Join-Path $PWD "out/standalone/$executableName"
+          if (-not (Test-Path -LiteralPath $executable)) { throw "Missing native CLI: $executable" }
+          & $executable --version
+          & $executable runtime-info
+          & $executable regression-eval --sample --out out/native-smoke
+      - name: Build native C ABI library
+        run: python scripts/build_native_library.py
+      - name: Stage native C ABI library
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/release
+          for f in src/argus/abi/argus.dll src/argus/abi/libargus.so src/argus/abi/libargus.dylib src/argus/abi/argus.lib; do
+            if [ -f "$f" ]; then cp "$f" out/release/; fi
+          done
+          staged=$(ls out/release/argus.dll out/release/libargus.* out/release/argus.lib 2>/dev/null | wc -l)
+          if [ "$staged" -eq 0 ]; then echo "no native library staged" >&2; exit 1; fi
+          ls -1 out/release
+      - name: Install NSIS
+        if: matrix.os_type == 'windows'
+        shell: pwsh
+        run: |
+          choco install nsis -y
+          echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Build Windows installer
+        if: matrix.os_type == 'windows'
+        shell: pwsh
+        run: |
+          $releaseDirectory = Join-Path $PWD "out/release"
+          New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
+          $payload = Join-Path $PWD "out/standalone/argus.exe"
+          $version = "${{ inputs.version }}"
+          $arch = "${{ matrix.id }}".Replace("windows-", "")
+          $nsiScript = Join-Path $PWD "packaging/windows/argus-sdk.nsi"
+          $licenseFile = Join-Path $PWD "LICENSE"
+          Push-Location "packaging/windows"
+          & makensis /DARGUS_PAYLOAD_EXE="$payload" /DARGUS_TARGET_ARCH="$arch" /DARGUS_VERSION="$version" /DARGUS_LICENSE_FILE="$licenseFile" "$nsiScript"
+          Pop-Location
+          $installerPath = Join-Path $PWD "packaging/windows/ArgusSDK-$version-windows-$arch-setup.exe"
+          Move-Item "$installerPath" "$releaseDirectory/"
+      - name: Build macOS package
+        if: matrix.os_type == 'macos'
+        run: |
+          mkdir -p out/release
+          chmod +x packaging/macos/build_pkg.sh
+          ./packaging/macos/build_pkg.sh out/standalone/argus ${{ inputs.version }} ${{ matrix.id }}
+          mv argus-sdk-${{ inputs.version }}-macos-${{ matrix.id }}.pkg out/release/ || mv argus-sdk-${{ inputs.version }}-${{ matrix.id }}.pkg out/release/
+      - name: Build Linux packages
+        if: matrix.os_type == 'linux'
+        run: |
+          mkdir -p out/release
+          chmod +x packaging/linux/build_deb.sh
+          ./packaging/linux/build_deb.sh out/standalone/argus ${{ inputs.version }} ${{ matrix.id }}
+          mv argus-sdk_${{ inputs.version }}_${{ matrix.id }}.deb out/release/
+      - name: Stage native binary
+        shell: pwsh
+        run: |
+          $releaseDirectory = Join-Path $PWD "out/release"
+          New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
+          $extension = if ($env:RUNNER_OS -eq 'Windows') { '.exe' } else { '' }
+          $source = Join-Path $PWD "out/standalone/argus$extension"
+          $destination = Join-Path $releaseDirectory "argus-sdk-v${{ inputs.version }}-${{ matrix.id }}$extension"
+          Copy-Item -LiteralPath $source -Destination $destination
+      - name: Upload native candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: argus-sdk-v${{ inputs.version }}-native-candidate-${{ matrix.id }}
+          path: out/release/
+          if-no-files-found: error
+
+  create-release:
+    name: Create GitHub release
+    needs: [verify-host, build-python, build-native-candidate]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+          merge-multiple: false
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Argus SDK v${{ inputs.version }}
+          body: |
+            ## Argus SDK v${{ inputs.version }}
+
+            Public beta release of Argus SDK - safety-supervised inference for physical systems.
+
+            ### Installation
+
+            **Python:**
+            ```bash
+            pip install argus-sdk
+            ```
+
+            **Windows:**
+            Download `ArgusSDK-${{ inputs.version }}-windows-x64-setup.exe` and run.
+
+            **macOS:**
+            Download `argus-sdk-${{ inputs.version }}-macos-x64.pkg` or `argus-sdk-${{ inputs.version }}-macos-arm64.pkg`.
+
+            **Linux:**
+            Download `argus-sdk_${{ inputs.version }}_amd64.deb` or `argus-sdk_${{ inputs.version }}_arm64.deb`.
+
+            ### Verification
+
+            All artifacts are signed with Sigstore. Verify with:
+            ```bash
+            python scripts/verify_signature.py <artifact> <artifact>.sigstore.json
+            ```
+
+            ### What's New
+
+            - Public beta release
+            - Signed artifacts with Sigstore
+            - Resolved SBOM with dependency inventory
+            - Cross-platform installers for Windows, macOS, Linux
+            - C ABI for cross-language compatibility
+          files: |
+            artifacts/**/ArgusSDK-*.exe
+            artifacts/**/argus-sdk-*.pkg
+            artifacts/**/argus-sdk-*.deb
+            artifacts/**/argus-sdk-v*-native-candidate-*
+            artifacts/**/argus_sdk-*-py3-none-any.whl
+            artifacts/**/argus_sdk-*.sigstore.json
+            artifacts/**/SBOM-*.cdx.json
+          draft: false
+          prerelease: true

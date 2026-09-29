@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "industrial_cobot_joint_v0",
+  "producer_config": {
+    "name": "cobot_trajectory_controller",
+    "interface_type": "proprietary_spi",
+    "command_rate_hz": 500.0,
+    "sequence_policy": {
+      "sequence_rollover": "monotonic_64",
+      "stale_data_age_ms": 4.0,
+      "reset_epoch": "teach_mode_exit",
+      "queue_overflow_behavior": "error",
+      "invalid_numeric_behavior": "reject"
+    }
+  },
+  "receiver_config": {
+    "name": "joint_servo_driver_iso10218",
+    "controller_type": "actuator_driver",
+    "max_latency_deadline_ms": 2.0,
+    "safety_function_class": "PLd"
+  },
+  "command_limits": {
+    "custom_limits": [
+      {"name": "max_joint_velocity_rads", "value": 1.047, "unit": "rad/s"},
+      {"name": "max_joint_torque_nm", "value": 100.0, "unit": "Nm"},
+      {"name": "max_tcp_speed_mps", "value": 0.25, "unit": "m/s"},
+      {"name": "collaborative_force_limit_n", "value": 150.0, "unit": "N"}
+    ]
+  },
+  "fault_corpus": {
+    "faults": [
+      {
+        "fault_id": "fc_cobot_001_stale_command",
+        "kind": "stale_command",
+        "description": "Joint trajectory command arrives after 4ms stale threshold; arm must stop at current position",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_cobot_002_missing_burst",
+        "kind": "missing_burst",
+        "description": "Trajectory controller stops sending joint commands for more than 3 servo periods",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_cobot_003_out_of_range_velocity",
+        "kind": "out_of_range",
+        "description": "Joint velocity command exceeds max_joint_velocity_rads declared in custom_limits",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_cobot_004_out_of_range_force",
+        "kind": "out_of_range",
+        "description": "Commanded force exceeds collaborative_force_limit_n (ISO/TS 15066 power and force limiting)",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_cobot_005_corrupt_frame",
+        "kind": "corrupt_frame",
+        "description": "SPI frame CRC error; joint driver must not execute corrupted trajectory command",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_cobot_006_nan_input",
+        "kind": "nan_input",
+        "description": "Joint position or velocity target encodes NaN or Inf",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_cobot_007_host_restart",
+        "kind": "host_restart",
+        "description": "Trajectory controller process restarts mid-motion; arm must return to teach-mode-exit position",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_cobot_008_duplicate_sequence",
+        "kind": "duplicate_sequence",
+        "description": "SPI sequence counter repeats within teach_mode_exit epoch",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_cobot_009_reconnect",
+        "kind": "reconnect",
+        "description": "SPI link reconnects after EMI-induced dropout; joint driver must request full handshake",
+        "expected_state": "safe_halt"
+      }
+    ]
+  },
+  "applicable_standards": [
+    "ISO 10218-1:2011",
+    "ISO/TS 15066:2016"
+  ]
+}

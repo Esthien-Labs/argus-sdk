@@ -1,0 +1,16 @@
+[package]
+name = "argus-sdk"
+version = "0.7.4"
+edition = "2021"
+description = "Argus SDK - Safety-supervised inference for physical systems"
+license = "Proprietary"
+
+[lib]
+name = "argus"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+libc = "0.2"
+
+[build-dependencies]
+bindgen = "0.69"

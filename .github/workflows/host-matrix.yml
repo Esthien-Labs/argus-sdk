@@ -1,0 +1,62 @@
+name: Argus SDK host matrix
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64
+            runner: windows-2025
+          - label: Windows arm64
+            runner: windows-11-arm
+          - label: macOS x64
+            runner: macos-15-intel
+          - label: macOS arm64
+            runner: macos-15
+          - label: Linux x64
+            runner: ubuntu-24.04
+          - label: Linux arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install package and test dependencies
+        run: python -m pip install --upgrade pip && python -m pip install . "pytest>=8"
+      - name: Verify public Python and CLI interfaces
+        run: |
+          python -c "import argus; assert argus.__version__ == '0.7.4'"
+          argus --version
+          argus runtime-info
+      - name: Run release-contract and regression checks
+        run: |
+          python -m pytest tests/unit/test_release_contract.py tests/integration/test_regression_eval_command.py
+          argus regression-eval --sample --out out/host-matrix
+      - name: Build native C ABI library
+        run: python scripts/build_native_library.py
+      - name: Run C ABI tests
+        run: python -m pytest tests/unit/test_abi_native.py -q
+      - name: Run malformed-input fuzz checks
+        run: python -m pytest tests/unit/test_fuzz_regression_eval.py -q
+      - name: Generate structured host validation record
+        run: python scripts/validate_host.py --out out/host-validation
+      - name: Upload host validation record
+        uses: actions/upload-artifact@v7
+        with:
+          name: host-validation-${{ matrix.label }}
+          path: out/host-validation/host_validation_record.json
+          if-no-files-found: error

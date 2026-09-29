@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "robot_diff_drive_ros2_v0",
+  "producer_config": {
+    "name": "nav2_navigation_stack",
+    "interface_type": "ros2_diff_drive",
+    "command_rate_hz": 10.0,
+    "sequence_policy": {
+      "sequence_rollover": "monotonic_64",
+      "stale_data_age_ms": 500.0,
+      "reset_epoch": "controller_start",
+      "queue_overflow_behavior": "drop_oldest",
+      "invalid_numeric_behavior": "reject"
+    }
+  },
+  "receiver_config": {
+    "name": "ros2_control_diff_drive_controller",
+    "controller_type": "motion_controller",
+    "max_latency_deadline_ms": 100.0,
+    "safety_function_class": "SIL2"
+  },
+  "command_limits": {
+    "max_linear_velocity_mps": 1.5,
+    "max_angular_velocity_rads": 1.0
+  },
+  "fault_corpus": {
+    "faults": [
+      {
+        "fault_id": "fc_ros2_001_stale_command",
+        "kind": "stale_command",
+        "description": "Command timestamp age exceeds stale_data_age_ms; receiver must not execute stale motion command",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_ros2_002_missing_burst",
+        "kind": "missing_burst",
+        "description": "Navigation stack stops publishing cmd_vel for 3 consecutive expected intervals",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_ros2_003_duplicate_sequence",
+        "kind": "duplicate_sequence",
+        "description": "Sequence number repeated within the same controller epoch",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_ros2_004_out_of_order",
+        "kind": "out_of_order",
+        "description": "Command sequence number arrives out of monotonic order without a reset epoch",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_ros2_005_out_of_range_linear",
+        "kind": "out_of_range",
+        "description": "cmd_vel linear.x exceeds max_linear_velocity_mps declared in profile",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_ros2_006_out_of_range_angular",
+        "kind": "out_of_range",
+        "description": "cmd_vel angular.z exceeds max_angular_velocity_rads declared in profile",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_ros2_007_nan_input",
+        "kind": "nan_input",
+        "description": "cmd_vel contains NaN or Inf in linear or angular velocity field",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_ros2_008_host_restart",
+        "kind": "host_restart",
+        "description": "Navigation host process restarts; sequence numbers reset without declared epoch transition",
+        "expected_state": "safe_halt"
+      },
+      {
+        "fault_id": "fc_ros2_009_reconnect",
+        "kind": "reconnect",
+        "description": "DDS participant reconnect event; receiver must verify epoch before accepting new commands",
+        "expected_state": "safe_halt"
+      }
+    ]
+  },
+  "applicable_standards": [
+    "ISO 3691-4:2023",
+    "IEC 61508:2010"
+  ]
+}

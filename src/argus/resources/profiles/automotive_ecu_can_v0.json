@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "automotive_ecu_can_v0",
+  "producer_config": {
+    "name": "vehicle_body_control_module",
+    "interface_type": "can_bus_torque",
+    "command_rate_hz": 100.0,
+    "sequence_policy": {"sequence_rollover": "wrap_65535", "stale_data_age_ms": 20.0, "reset_epoch": "ignition_cycle", "queue_overflow_behavior": "drop_newest", "invalid_numeric_behavior": "reject"}
+  },
+  "receiver_config": {"name": "motor_torque_controller_asil_c", "controller_type": "actuator_driver", "max_latency_deadline_ms": 10.0, "safety_function_class": "ASIL_C"},
+  "command_limits": {"max_torque_mnm": 50000},
+  "fault_corpus": {
+    "faults": [
+      {"fault_id": "fc_can_001_stale_command", "kind": "stale_command", "description": "CAN message alive counter not incrementing; torque command age exceeds 20ms", "expected_state": "safe_halt"},
+      {"fault_id": "fc_can_002_missing_burst", "kind": "missing_burst", "description": "CAN bus silent for more than 3 expected message periods", "expected_state": "safe_halt"},
+      {"fault_id": "fc_can_003_duplicate_sequence", "kind": "duplicate_sequence", "description": "CAN alive counter repeats within the same ignition cycle", "expected_state": "safe_halt"},
+      {"fault_id": "fc_can_004_out_of_range", "kind": "out_of_range", "description": "Commanded torque exceeds max_torque_mnm declared in profile", "expected_state": "safe_halt"},
+      {"fault_id": "fc_can_005_corrupt_frame", "kind": "corrupt_frame", "description": "CAN frame CRC mismatch", "expected_state": "safe_halt"},
+      {"fault_id": "fc_can_006_out_of_order", "kind": "out_of_order", "description": "Alive counter decrements unexpectedly within an ignition cycle", "expected_state": "safe_halt"},
+      {"fault_id": "fc_can_007_host_restart", "kind": "host_restart", "description": "BCM ECU reset during active torque command", "expected_state": "safe_halt"},
+      {"fault_id": "fc_can_008_nan_input", "kind": "nan_input", "description": "Torque signal encodes a reserved or invalid bit pattern", "expected_state": "safe_halt"},
+      {"fault_id": "fc_can_009_reconnect", "kind": "reconnect", "description": "CAN node reconnects after bus-off condition", "expected_state": "safe_halt"}
+    ]
+  },
+  "applicable_standards": ["ISO 26262:2018", "IEC 61508:2010"]
+}

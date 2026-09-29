@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "bionic_wrist_v1",
+  "sensors": [
+    {
+      "name": "forearm_emg_array",
+      "type": "emg",
+      "channels": 8,
+      "sample_rate_hz": 1000,
+      "noise_threshold": 15
+    },
+    {
+      "name": "wrist_imu_6dof",
+      "type": "imu",
+      "channels": 6,
+      "sample_rate_hz": 100,
+      "noise_threshold": 0.04
+    }
+  ],
+  "intent_classes": [
+    "rest",
+    "wrist_pronation",
+    "wrist_supination",
+    "power_grasp",
+    "pinch_grasp"
+  ],
+  "actuator": {
+    "name": "rotary_wrist_actuator",
+    "max_torque_nm": 12.5,
+    "max_velocity_rad_s": 4.5,
+    "position_min_rad": -3.14159,
+    "position_max_rad": 3.14159
+  },
+  "fault_paths": [
+    {"sensor": "forearm_emg_array", "action": "safe_halt"},
+    {"sensor": "wrist_imu_6dof", "action": "hold_position"}
+  ]
+}

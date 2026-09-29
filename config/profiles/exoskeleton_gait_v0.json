@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "exoskeleton_gait_v0",
+  "sensors": [
+    {
+      "name": "thigh_emg_cluster",
+      "type": "emg",
+      "channels": 8,
+      "sample_rate_hz": 1000,
+      "noise_threshold": 25
+    },
+    {
+      "name": "shank_imu_6dof",
+      "type": "imu",
+      "channels": 6,
+      "sample_rate_hz": 100,
+      "noise_threshold": 0.08
+    }
+  ],
+  "intent_classes": [
+    "rest",
+    "stance_phase",
+    "swing_phase",
+    "stair_ascent",
+    "stair_descent"
+  ],
+  "actuator": {
+    "name": "hip_knee_exoskeleton_motor",
+    "max_torque_nm": 60.0,
+    "max_velocity_rad_s": 5.0,
+    "position_min_rad": -0.523599,
+    "position_max_rad": 2.0944
+  },
+  "fault_paths": [
+    {"sensor": "thigh_emg_cluster", "action": "safe_halt"},
+    {"sensor": "shank_imu_6dof", "action": "hold_position"}
+  ]
+}

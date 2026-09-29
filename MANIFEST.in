@@ -1,0 +1,37 @@
+prune src/atlas
+prune src/esthien
+prune src/argus_sdk.egg-info
+
+# Internal modules. These are not part of the distributed SDK package and are
+# excluded from the source distribution.
+prune src/argus/analytics
+prune src/argus/benchmarking
+prune src/argus/dataflow
+prune src/argus/dsp
+prune src/argus/inference
+prune src/argus/platform
+prune src/argus/scheduler
+prune src/argus/sdk
+prune src/argus/security
+prune src/argus/sim
+prune src/argus/verification
+prune src/argus/web
+exclude src/argus/benchmark_lab.py
+exclude src/argus/safety_case.py
+exclude src/argus/toolchain.py
+exclude src/argus/workspace.py
+
+recursive-include src/argus/resources/profiles *.json
+
+# Exclude source .py files for compiled modules (they are replaced by .pyd)
+exclude src/argus/safety/envelope.py
+exclude src/argus/compiler/compiler.py
+exclude src/argus/compiler/schema.py
+
+# Include compiled extensions
+recursive-include src/argus/safety *.pyd *.so *.dylib
+recursive-include src/argus/compiler *.pyd *.so *.dylib
+
+# Public reference documentation
+recursive-include docs/reference *.md *.c *.cs *.go *.java *.js *.py *.rs
+include docs/mkdocs.yml

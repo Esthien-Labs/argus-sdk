@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+
+# Build and test artifacts
+build-*/
+build/
+node_modules/
+out/
+dist/
+backup/
+*.o
+*.a
+*.exe
+*.dll
+*.so
+*.dylib
+*.exp
+*.lib
+*.obj
+*.vvp
+*.vcd
+
+# Design renders and large PDFs (kept in S3)
+docs/internal/design/rendered/
+docs/internal/design/*.pdf
+
+# LibreLane / OpenLane run directories (large; evidence stored in S3)
+rtl/asic/sky130/librelane/runs/
+rtl/asic/ihp_sg13g2/librelane/runs/
+rtl/asic/*/librelane/runs/
+# LibreLane run logs (committed separately when they are evidence of record)
+rtl/asic/sky130/librelane/subsystem_run*.log
+rtl/asic/sky130/librelane/librelane*.log
+
+# Tools and IDE
+tools/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

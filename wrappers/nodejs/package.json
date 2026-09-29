@@ -1,0 +1,36 @@
+{
+  "name": "@esthien/argus",
+  "version": "0.7.4",
+  "description": "Argus SDK - Safety-supervised inference for physical systems",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "install": "node-gyp rebuild",
+    "build": "node-gyp rebuild",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "argus",
+    "safety",
+    "inference",
+    "robotics"
+  ],
+  "author": "Esthien Labs",
+  "license": "Proprietary",
+  "dependencies": {
+    "node-addon-api": "^8.9.2",
+    "node-gyp": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

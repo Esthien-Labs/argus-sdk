@@ -1,0 +1,9 @@
+LIBRARY argus
+EXPORTS
+    argus_abi_version
+    argus_envelope_create
+    argus_envelope_destroy
+    argus_envelope_reset
+    argus_envelope_evaluate
+    argus_envelope_get_state
+    argus_envelope_get_low_streak

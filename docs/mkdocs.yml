@@ -1,0 +1,21 @@
+site_name: Argus SDK Reference
+site_description: Argus SDK API, CLI, and C ABI reference
+site_author: Esthien Labs
+copyright: Copyright 2026 Esthien Labs
+docs_dir: reference
+site_dir: ../out/docs-site
+
+theme:
+  name: mkdocs
+
+markdown_extensions:
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Overview: index.md
+  - Python API: API_REFERENCE.md
+  - CLI: CLI_REFERENCE.md
+  - C ABI: C_ABI_REFERENCE.md
+  - Examples: examples/README.md
