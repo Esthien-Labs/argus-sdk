@@ -219,6 +219,90 @@ out-of-distribution input multiplies by `1 - ood_score`.
 `SensorHealth.as_signal_quality()` returns the equivalent `SignalQuality`, so the
 result plugs into the existing envelope unchanged.
 
+## 2B-2. Authority Capabilities
+
+An Authority Capability is a signed, immutable token that bounds what an AI
+system may do. It is the L0 authority layer of the enforcement boundary.
+
+| Name | Purpose |
+|---|---|
+| `ActuatorBounds` | Per-actuator torque, velocity, and duration bounds |
+| `CapabilityValidity` | Issue time, expiry, and offline grace |
+| `AuthorityCapability` | The signed token itself |
+| `CapabilityStore` | Load, revoke, and enforce capabilities for one audience |
+| `EnforcementBoundary` | The L0 to L2 composition: capability authority plus the safety envelope |
+| `delegate_capability` | Issue a strictly narrower derived token |
+| `CapabilityError` | Raised for malformed tokens and invalid delegations |
+
+A capability carries: `cap_id`, `issuer`, `audience` (the device it is bound
+to), `intent_classes`, per-actuator `bounds`, `profile_id`, optional
+`model_id`/`model_version` provenance binding, `validity`, an optional
+`parent_cap_id` for delegated tokens, and an Ed25519 `signature` over the
+canonical serialization.
+
+Lifecycle:
+
+1. **Issue.** The issuing authority signs the token with an Ed25519 signing key.
+2. **Load.** `CapabilityStore.load(capability, now=..., parent=...)` verifies the
+   signature against the trusted issuer key, the audience, expiry with offline
+   grace, revocation, and the parent chain. A failed check refuses the load with
+   a named reason.
+3. **Enforce.** `EnforcementBoundary.evaluate_proposal(...)` checks every
+   proposal against the loaded capabilities, evaluates it through the safety
+   envelope, and clamps the command to the tightest loaded bounds. A refusal
+   produces a `SAFE_HALT` command with a `refusal_reason`.
+4. **Revoke.** `store.revoke(cap_id)` is local and needs no network and no key.
+   Revoking a parent invalidates its derived tokens.
+5. **Delegate.** `delegate_capability(parent, ...)` issues a derived token that
+   is strictly narrower: fewer intent classes, tighter bounds, no longer
+   validity. A wider delegation raises `CapabilityError`.
+
+```python
+from nacl.signing import SigningKey
+from argus import (
+    ActuatorBounds, ActionProvenance, AuthorityCapability, CapabilityStore,
+    CapabilityValidity, ConfidenceCoupledSafetyEnvelope, EnforcementBoundary,
+    ProposedAction, SafetyConfig, SignalQuality,
+)
+
+signing_key = SigningKey.generate()
+capability = AuthorityCapability(
+    cap_id="cap-001",
+    issuer="esthien-root",
+    audience="robot-001",
+    intent_classes=("knee_flexion", "knee_extension"),
+    bounds=(ActuatorBounds("knee_joint", max_torque_nm=25.0, max_velocity_rad_s=3.0),),
+    profile_id="robot_diff_drive_ros2_v0",
+    validity=CapabilityValidity(issued_at=1_000_000.0, expires_at=1_003_600.0),
+).sign(signing_key)
+
+store = CapabilityStore("robot-001", {"esthien-root": signing_key.verify_key})
+store.load(capability, now=1_000_000.0)
+
+boundary = EnforcementBoundary(store, ConfidenceCoupledSafetyEnvelope(SafetyConfig()))
+command = boundary.evaluate_proposal(
+    ProposedAction(
+        intent="knee_flexion",
+        confidence=0.92,
+        provenance=ActionProvenance(
+            model_id="planner-v3", model_version="1.4.2",
+            profile_id="robot_diff_drive_ros2_v0", source="hosted_agent",
+            issued_at=1_000_000.0,
+        ),
+    ),
+    SignalQuality(reliability=0.95, flatline_channels=(), artifact_detected=False),
+    now=1_000_000.0,
+)
+```
+
+A compromised model cannot forge a capability, because it does not hold the
+signing key. A compromised server cannot widen one, because the boundary clamps
+every command to the loaded bounds. Revocation works with the cable pulled.
+
+The signature scheme is Ed25519 through PyNaCl. This layer does not implement
+key custody, release signing, or hardware binding; those remain separately
+gated.
+
 ## 2C. The wedge containment benchmark
 
 `argus.regression.wedge` runs the containment demonstration that separates the

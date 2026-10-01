@@ -17,14 +17,29 @@ from .interactive_demo import (
     DemoFrameRecord,
     run_pat001_showcase,
 )
+from .capability import (
+    ActuatorBounds,
+    AuthorityCapability,
+    CapabilityError,
+    CapabilityStore,
+    CapabilityValidity,
+    EnforcementBoundary,
+    delegate_capability,
+)
 from .sensor_health import SensorHealth, SensorHealthGate
 
 __all__ = [
     "ActionProvenance",
+    "ActuatorBounds",
     "ActuatorCommand",
+    "AuthorityCapability",
     "AuthorityScope",
+    "CapabilityError",
+    "CapabilityStore",
+    "CapabilityValidity",
     "ConfidenceCoupledSafetyEnvelope",
     "DemoFrameRecord",
+    "EnforcementBoundary",
     "EnvelopeState",
     "IndependentHardwareSupervisor",
     "Prediction",
@@ -34,5 +49,6 @@ __all__ = [
     "SensorHealthGate",
     "SignalQuality",
     "SignalQualityGate",
+    "delegate_capability",
     "run_pat001_showcase",
 ]
