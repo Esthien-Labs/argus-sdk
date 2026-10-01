@@ -1,8 +1,8 @@
 """Software Authority Capabilities: the L0 authority layer of the enforcement boundary.
 
 An Authority Capability is a signed, immutable token that bounds what an AI system
-may do. The software form specified in EST-SPEC-009 section 8 ships in the SDK
-before any silicon exists; the hardware form ships with EARG-001 and successors.
+may do. The software form ships in the SDK before any silicon exists; the
+hardware form ships with the safety silicon and its successors.
 
 A capability is not a policy document. It is a token: it can be checked locally,
 refused locally, revoked locally without the network, and delegated to another
@@ -12,7 +12,7 @@ extend one, because the boundary clamps every command to the loaded bounds.
 
 The signature scheme is Ed25519 through PyNaCl, a reviewed standard primitive.
 This module does not implement key custody, release signing, or hardware
-binding; those remain separately gated per EST-SPEC-009.
+binding; those remain separately gated.
 """
 
 from __future__ import annotations
