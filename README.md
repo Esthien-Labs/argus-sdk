@@ -120,23 +120,23 @@ packaging/windows/         Windows installer source and command wrapper
 .github/workflows/         Host verification and candidate-build workflows
 ```
 
-## v0.8 roadmap (EST-PLAN-005 Phase 1)
+## v0.8 roadmap (Phase 1)
 
 The next major release implements the enforcement boundary protocol stack:
 
-| Milestone | Spec | Description |
-|---|---|---|
-| Proposal protocol | EST-SPEC-012 | Typed ProposedAction schema, canonical binary encoding, provenance chain |
-| Policy language | EST-SPEC-013 | Formal authority profile grammar, composable, compiles to Rust/WASM/SystemVerilog |
-| Attestation protocol | EST-SPEC-014 | Merkle-chained evidence records, hardware-rooted signing, public verification |
-| Argus Core v0.8 | - | Formally verified evaluation loop, sub-microsecond decisions, multi-model concurrency |
-| Runtime Monitor Engine | - | Domain-agnostic OOD detection, calibrated uncertainty, Byzantine sensor fusion |
-| Wedge benchmark | - | Pre-registered, reproducible fault-containment demonstration |
-| ROS 2 node | - | Safety node wrapping the envelope for robotics stacks |
+| Milestone | Description |
+|---|---|
+| Proposal protocol | Typed ProposedAction schema, canonical binary encoding, provenance chain |
+| Policy language | Formal authority profile grammar, composable, compiles to Rust/WASM/SystemVerilog |
+| Attestation protocol | Merkle-chained evidence records, hardware-rooted signing, public verification |
+| Argus Core v0.8 | Formally verified evaluation loop, sub-microsecond decisions, multi-model concurrency |
+| Runtime Monitor Engine | Domain-agnostic OOD detection, calibrated uncertainty, Byzantine sensor fusion |
+| Wedge benchmark | Pre-registered, reproducible fault-containment demonstration |
+| ROS 2 node | Safety node wrapping the envelope for robotics stacks |
 
 v0.8 implements the enforcement boundary as a software layer that runs on any
-hardware. When EARG-001 silicon is present, the same protocols are enforced in
-hardware with hardware-rooted attestation.
+hardware. When the Argus safety silicon is present, the same protocols are
+enforced in hardware with hardware-rooted attestation.
 
 ## License and contact
 
