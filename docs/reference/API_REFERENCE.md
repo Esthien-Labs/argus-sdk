@@ -303,6 +303,52 @@ The signature scheme is Ed25519 through PyNaCl. This layer does not implement
 key custody, release signing, or hardware binding; those remain separately
 gated.
 
+## 2B-3. The proposal protocol wire form
+
+`argus.protocol.proposal` implements the typed, canonical binary encoding of an
+AI action proposal: fixed-layout, little-endian, no padding, 214-byte fixed
+section plus length-prefixed target and typed-map parameters.
+
+| Name | Purpose |
+|---|---|
+| `ActionClass` | ACTUATE, COMMUNICATE, MODIFY_STATE, QUERY, DELEGATE, HALT |
+| `RejectionCode` | The ten typed rejection codes, closed enumeration |
+| `ParameterType` | u64, f64, bool, string |
+| `Parameter` | One typed-map entry |
+| `WireProposal` | A proposal in canonical wire form |
+| `encode_proposal` | Encode to canonical bytes |
+| `decode_proposal` | Decode canonical bytes; typed rejection only |
+| `f32` | Round a float to its float32 representation |
+
+```python
+from argus.protocol import ActionClass, Parameter, ParameterType, WireProposal, encode_proposal, decode_proposal
+
+proposal = WireProposal(
+    action_class=ActionClass.ACTUATE,
+    confidence=0.973,
+    context_hash=context_hash,               # bytes[32]
+    timestamp=5_000_000,                     # monotonic counter, not wall clock
+    model_identity_hash=model_id_hash,      # bytes[32]
+    model_weight_hash=weight_hash,          # bytes[32]
+    previous_attestation=previous_hash,     # bytes[32]
+    host_attestation=host_signature,        # bytes[64], Ed25519
+    target="robot/joint3/position",
+    parameters=(
+        Parameter("angle_rad", ParameterType.FLOAT64, 1.5708),
+        Parameter("max_velocity_rad_s", ParameterType.FLOAT64, 0.5),
+        Parameter("max_torque_nm", ParameterType.FLOAT64, 12.0),
+    ),
+)
+
+data = encode_proposal(proposal)
+decoded = decode_proposal(data)
+```
+
+Every rejection is a `ProposalProtocolError` carrying a `RejectionCode`; no
+other exception type is raised for any input. Confidence is float32 on the
+wire; round-trip equality holds for float32-representable values. The maximum
+proposal size is 65,536 bytes.
+
 ## 2C. The wedge containment benchmark
 
 `argus.regression.wedge` runs the containment demonstration that separates the

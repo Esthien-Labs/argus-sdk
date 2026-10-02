@@ -1,11 +1,11 @@
 # Argus SDK
 
-Argus SDK is Esthien's software entry point for profile-bound controller
-regression evaluation. It provides a Python API and the `argus` command-line
-interface for loading a declared trace, applying a declared fault corpus, and
-writing evidence records with explicit boundaries.
+Argus SDK is Esthien's software enforcement boundary for AI systems. It provides
+the proposal contract, policy evaluation, runtime monitoring, and evidence chain
+for AI-driven systems operating in the physical world. A model proposes. The
+boundary disposes. Every decision is recorded in a tamper-evident evidence chain.
 
-## v0.7.4 status
+## v0.7.4 status (current public release)
 
 `0.7.4` is the first public release of the Argus SDK. It is published on PyPI as
 `esthien-argus-sdk` and on GitHub as release `v0.7.4`. The Python wheel is signed
@@ -119,6 +119,24 @@ scripts/build_release.py   Controlled candidate artifact builder
 packaging/windows/         Windows installer source and command wrapper
 .github/workflows/         Host verification and candidate-build workflows
 ```
+
+## v0.8 roadmap (EST-PLAN-005 Phase 1)
+
+The next major release implements the enforcement boundary protocol stack:
+
+| Milestone | Spec | Description |
+|---|---|---|
+| Proposal protocol | EST-SPEC-012 | Typed ProposedAction schema, canonical binary encoding, provenance chain |
+| Policy language | EST-SPEC-013 | Formal authority profile grammar, composable, compiles to Rust/WASM/SystemVerilog |
+| Attestation protocol | EST-SPEC-014 | Merkle-chained evidence records, hardware-rooted signing, public verification |
+| Argus Core v0.8 | - | Formally verified evaluation loop, sub-microsecond decisions, multi-model concurrency |
+| Runtime Monitor Engine | - | Domain-agnostic OOD detection, calibrated uncertainty, Byzantine sensor fusion |
+| Wedge benchmark | - | Pre-registered, reproducible fault-containment demonstration |
+| ROS 2 node | - | Safety node wrapping the envelope for robotics stacks |
+
+v0.8 implements the enforcement boundary as a software layer that runs on any
+hardware. When EARG-001 silicon is present, the same protocols are enforced in
+hardware with hardware-rooted attestation.
 
 ## License and contact
 
