@@ -17,6 +17,7 @@ binding; those remain separately gated.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, replace
 from typing import Mapping
@@ -24,6 +25,7 @@ from typing import Mapping
 from nacl.exceptions import BadSignatureError
 from nacl.signing import SigningKey, VerifyKey
 
+from ..protocol.attestation import Decision, EvidenceRecord, RecordType
 from .envelope import ActuatorCommand, EnvelopeState, ProposedAction
 
 __all__ = [
@@ -458,22 +460,33 @@ def refused_command(proposal: ProposedAction, reliability: float, reason: str) -
 
 
 class EnforcementBoundary:
-    """The L0 to L2 software enforcement boundary.
+    """The L0 to L4 software enforcement boundary.
 
     Composes the capability authority (L0) with the confidence-coupled safety
-    envelope (L2). A proposal enters; a bounded command leaves. There is no
-    other path, and no bypass: a capability refusal produces a SAFE_HALT
-    command, an envelope refusal produces a SAFE_HALT command, and a command
-    that passes both is clamped to the loaded capability bounds.
+    envelope (L2) and the evidence chain (L4). A proposal enters; a bounded
+    command leaves, and the decision is recorded. There is no other path and no
+    bypass: a capability refusal produces a SAFE_HALT command, an envelope
+    refusal produces a SAFE_HALT command, and a command that passes both is
+    clamped to the loaded capability bounds.
+
+    The evidence record is a side effect of every evaluation when a chain is
+    supplied. There is no code path that evaluates a proposal without
+    producing evidence.
 
     Args:
         store: The capability authority for this device.
         envelope: The confidence-coupled safety envelope.
+        chain: Optional evidence chain; every evaluation appends a DECISION
+            record when supplied.
+        policy_hash: SHA-256 of the active policy, recorded in every evidence
+            record when a chain is supplied.
     """
 
-    def __init__(self, store: CapabilityStore, envelope) -> None:
+    def __init__(self, store: CapabilityStore, envelope, chain=None, policy_hash: bytes | None = None) -> None:
         self._store = store
         self._envelope = envelope
+        self._chain = chain
+        self._policy_hash = policy_hash if policy_hash is not None else bytes(32)
 
     @property
     def refusals(self) -> tuple[str, ...]:
@@ -504,11 +517,58 @@ class EnforcementBoundary:
         """
         reason = self._store.check_proposal(proposal, now=now)
         if reason is not None:
-            return refused_command(proposal, quality.reliability, reason)
-        command = self._envelope.evaluate_proposal(
-            proposal,
-            quality,
-            requested_torque_nm=requested_torque_nm,
-            requested_velocity_rad_s=requested_velocity_rad_s,
+            command = refused_command(proposal, quality.reliability, reason)
+            decision = Decision.DENY
+            clause = 0x0000
+        else:
+            command = self._envelope.evaluate_proposal(
+                proposal,
+                quality,
+                requested_torque_nm=requested_torque_nm,
+                requested_velocity_rad_s=requested_velocity_rad_s,
+            )
+            command = self._store.clamp(command, now=now)
+            if command.refusal_reason is not None or command.envelope_state is EnvelopeState.SAFE_HALT:
+                decision = Decision.DENY
+            elif command.vetoed_by_supervisor or command.envelope_state is EnvelopeState.DEGRADED:
+                decision = Decision.MODIFY
+            else:
+                decision = Decision.APPROVE
+            clause = 0x0000
+        self._record(proposal, command, decision, clause)
+        return command
+
+    def _record(
+        self, proposal: ProposedAction, command: ActuatorCommand, decision, clause: int
+    ) -> None:
+        """Append the decision's evidence record. Evidence is never optional."""
+        if self._chain is None:
+            return
+        record = EvidenceRecord(
+            record_type=RecordType.DECISION,
+            sequence_number=0,
+            timestamp_counter=int(proposal.provenance.issued_at),
+            proposal_hash=hashlib.sha256(
+                json.dumps(
+                    {
+                        "intent": proposal.intent,
+                        "confidence": proposal.confidence,
+                        "provenance": proposal.provenance.__dict__,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).digest(),
+            policy_hash=self._policy_hash,
+            decision=decision,
+            policy_clause_ref=clause,
+            monitor_state_hash=hashlib.sha256(
+                json.dumps(
+                    {"state": command.envelope_state.name, "vetoed": command.vetoed_by_supervisor},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).digest(),
+            previous_record_hash=bytes(32),
         )
-        return self._store.clamp(command, now=now)
+        self._chain.append(record)

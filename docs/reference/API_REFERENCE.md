@@ -349,6 +349,58 @@ other exception type is raised for any input. Confidence is float32 on the
 wire; round-trip equality holds for float32-representable values. The maximum
 proposal size is 65,536 bytes.
 
+## 2B-4. The attestation protocol and evidence chain
+
+`argus.protocol.attestation` is the cryptographic evidence chain: every decision
+the boundary makes produces a tamper-evident, publicly verifiable record.
+
+| Name | Purpose |
+|---|---|
+| `EvidenceRecord` | One record: proposal hash, policy hash, decision, clause, monitor state, chain link, Ed25519 signature, extensions |
+| `RecordType` | DECISION, POLICY_LOAD, ESCALATION, HALT, TAMPER, HEARTBEAT |
+| `Decision` | not-applicable, approve, deny, modify |
+| `EvidenceChain` | The ordered, append-only, hash-linked chain |
+| `merkle_root` / `merkle_inclusion_proof` / `verify_merkle_inclusion` | Batch Merkle trees and O(log n) inclusion proofs |
+| `decode_record` | Decode one record from canonical bytes |
+
+The chain links each record to the SHA-256 of its predecessor, starting from a
+32-byte genesis hash. Records are signed with Ed25519 over the pre-signature
+section. Verification is offline, stateless, and deterministic: it needs only
+the record, the policy hash, and the public key.
+
+```python
+from nacl.signing import SigningKey
+from argus.protocol import EvidenceChain, EvidenceRecord, RecordType, Decision, GENESIS_HASH
+
+chain = EvidenceChain(SigningKey.generate())
+chain.append(
+    EvidenceRecord(
+        record_type=RecordType.POLICY_LOAD,
+        sequence_number=0,
+        timestamp_counter=10_485_762,
+        proposal_hash=GENESIS_HASH,
+        policy_hash=policy_hash,
+        decision=Decision.NOT_APPLICABLE,
+        policy_clause_ref=0,
+        monitor_state_hash=monitor_hash,
+        previous_record_hash=GENESIS_HASH,
+    )
+)
+chain.head_hash()          # SHA-256 of the last record
+chain.verify(public_key)   # [] when every link and signature holds
+```
+
+The evidence record is a side effect of every evaluation: `EnforcementBoundary`
+appends a DECISION record for each proposal when a chain is supplied. Approve,
+deny, and modify map to the envelope's own states - an approved command, a
+refused or halted one, and one restricted by the authority bounds or a degraded
+envelope state.
+
+Two provisional decisions are used pending specification ratification: the
+signature covers the pre-signature section only, because signing a range that
+includes the signature field is circular; and the decision enumeration is
+0x00 not-applicable, 0x01 approve, 0x02 deny, 0x03 modify.
+
 ## 2C. The wedge containment benchmark
 
 `argus.regression.wedge` runs the containment demonstration that separates the

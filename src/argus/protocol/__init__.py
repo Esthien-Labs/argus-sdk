@@ -1,5 +1,17 @@
 """Atlas Capability Negotiation Protocol."""
 
+from .attestation import (
+    GENESIS_HASH,
+    AttestationError,
+    Decision,
+    EvidenceChain,
+    EvidenceRecord,
+    RecordType,
+    decode_record,
+    merkle_inclusion_proof,
+    merkle_root,
+    verify_merkle_inclusion,
+)
 from .negotiation import (
     CapabilityManifest,
     CapabilityNegotiator,
@@ -24,8 +36,13 @@ from .proposal import (
 
 __all__ = [
     "ActionClass",
+    "AttestationError",
     "CapabilityManifest",
     "CapabilityNegotiator",
+    "Decision",
+    "EvidenceChain",
+    "EvidenceRecord",
+    "GENESIS_HASH",
     "ManifestValidationError",
     "MAX_PROPOSAL_SIZE",
     "NegotiationPolicy",
@@ -34,10 +51,15 @@ __all__ = [
     "ParameterType",
     "PROTOCOL_VERSION",
     "ProposalProtocolError",
+    "RecordType",
     "RejectionCode",
     "SensorCapability",
     "WireProposal",
     "decode_proposal",
+    "decode_record",
     "encode_proposal",
     "f32",
+    "merkle_inclusion_proof",
+    "merkle_root",
+    "verify_merkle_inclusion",
 ]
