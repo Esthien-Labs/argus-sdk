@@ -1,18 +1,24 @@
 # Argus SDK
 
-Argus SDK is Esthien's software enforcement boundary for AI systems. It provides
-the proposal contract, policy evaluation, runtime monitoring, and evidence chain
-for AI-driven systems operating in the physical world. A model proposes. The
-boundary disposes. Every decision is recorded in a tamper-evident evidence chain.
+Argus SDK is Esthien's developer toolkit for the Argus decision boundary. The
+released version, 0.7.4, provides profile-bound controller regression
+evaluation: a Python API and the `argus` command-line interface for loading a
+declared trace, applying a declared fault corpus, and writing evidence records
+with explicit boundaries.
 
-## v0.7.4 status (current public release)
+This branch is the development line for 0.8. It adds typed proposals, a
+capability system, a sensor health gate, an evidence chain, and a containment
+benchmark. None of that is part of a release yet.
 
-`0.7.4` is the first public release of the Argus SDK. It is published on PyPI as
-`esthien-argus-sdk` and on GitHub as release `v0.7.4`. The Python wheel is signed
-with Sigstore, and the resolved dependency SBOM is released with it. The released
-command-line surface is `runtime-info` and `regression-eval`.
+## Releases
 
-The release validates these host tuples:
+| Version | Status | Where |
+|---|---|---|
+| 0.7.4 | Current release | PyPI, package `esthien-argus-sdk` |
+
+The command surface of 0.7.4 is `runtime-info` and `regression-eval`.
+
+0.7.4 was built and validated on these host tuples by the release workflow:
 
 | Operating system | Architectures |
 |---|---|
@@ -21,13 +27,16 @@ The release validates these host tuples:
 | Linux | x64, arm64 |
 
 Each tuple has a recorded installation, CLI, Python API, and regression-evaluation
-result from the release workflow. The Windows installer is distributed unsigned;
-Authenticode signing is an open item and requires no change to the Python package.
+result. Host validation in continuous integration is a supported-host record, not a
+hardware support claim. No physical board, sensor, or instrument is part of the
+programme inventory, and a passing tuple does not establish measured hardware or
+field performance.
 
-Host validation in continuous integration is a supported-host record, not a hardware
-support claim. No physical board, sensor, or instrument is part of the programme
-inventory, and a passing tuple does not establish measured hardware or field
-performance.
+The 0.7.4 package on PyPI is not accompanied by a published signature bundle, and
+this repository has no GitHub release for it. Release files that carry Sigstore
+bundles, with a verification command for each file, are planned for the next patch
+release. The Windows installer is distributed unsigned; Authenticode signing is an
+open item and requires no change to the Python package.
 
 ## Current evidence boundary
 
@@ -37,14 +46,15 @@ performance.
 - The SDK does not establish hardware timing, thermal, power, functional-safety
   certification, production silicon, or customer-system qualification.
 - Measured-evidence classes require a separately controlled measurement record
-  and are not asserted by v0.7.4.
+  and are not asserted by any release.
 
 ## Distribution boundary
 
 The product distribution path exposes a deliberately narrow command surface.
 It does not claim source-code secrecy, package encryption, hardware binding,
-release signing, security certification, or production key custody. Those
-controls require separately approved technical and operational evidence.
+security certification, or production key custody. Those controls require
+separately approved technical and operational evidence. Release signing is
+described under Releases.
 
 ## Local development
 
@@ -87,24 +97,22 @@ argus regression-eval --sample --out <directory>
 argus --help
 ```
 
-`runtime-info` reports the detected host, the planned validation matrix, the
-Windows x64 installer-candidate scope, and the release-approval boundary.
+`runtime-info` reports the detected host, the validation matrix, and the evidence
+boundary of the installed release.
 
 ## Candidate-release build
 
-The internal candidate builder creates a controlled wheel, dependency
-inventory, and a machine-readable release manifest. It does not create a
-public source archive, sign an artifact, or approve distribution. Native
-packages are built and validated per host tuple. Windows candidates use an
-application installer; macOS and Linux packages require their own native
-package and signing paths before they can be offered.
+The candidate builder creates a controlled wheel, dependency inventory, and a
+machine-readable release manifest. It does not create a public source archive,
+sign an artifact, or approve distribution. Native packages are built and validated
+per host tuple.
 
 ```powershell
 python -m pip install build==1.6.1
 python scripts\build_release.py --out C:\temp\argus-sdk-release-candidate
 ```
 
-Any distribution remains blocked until the required host tuple passes, the
+Any distribution remains blocked until the required host tuples pass, the
 dependency inventory receives security review, the artifact is signed with an
 approved release key, and a release-approval record is complete.
 
@@ -120,23 +128,19 @@ packaging/windows/         Windows installer source and command wrapper
 .github/workflows/         Host verification and candidate-build workflows
 ```
 
-## v0.8 roadmap (Phase 1)
+## Development line for 0.8
 
-The next major release implements the enforcement boundary protocol stack:
-
-| Milestone | Description |
+| Component | Description |
 |---|---|
 | Proposal protocol | Typed ProposedAction schema, canonical binary encoding, provenance chain |
-| Policy language | Formal authority profile grammar, composable, compiles to Rust/WASM/SystemVerilog |
-| Attestation protocol | Merkle-chained evidence records, hardware-rooted signing, public verification |
-| Argus Core v0.8 | Formally verified evaluation loop, sub-microsecond decisions, multi-model concurrency |
-| Runtime Monitor Engine | Domain-agnostic OOD detection, calibrated uncertainty, Byzantine sensor fusion |
-| Wedge benchmark | Pre-registered, reproducible fault-containment demonstration |
-| ROS 2 node | Safety node wrapping the envelope for robotics stacks |
+| Authority capabilities | Scoped, expiring, single-use capability tokens checked at the boundary |
+| Attestation protocol | Merkle-chained evidence records with signed batch roots |
+| Sensor health gate | Declared sensor health and out-of-distribution checks |
+| Wedge benchmark | Declared fault corpus with a reproducible containment measurement |
 
-v0.8 implements the enforcement boundary as a software layer that runs on any
-hardware. When the Argus safety silicon is present, the same protocols are
-enforced in hardware with hardware-rooted attestation.
+A policy language and a ROS 2 node are planned for the same line. Components in this
+table are under development. Each one becomes a release claim only when it has a
+recorded evidence class and a release that contains it.
 
 ## License and contact
 
