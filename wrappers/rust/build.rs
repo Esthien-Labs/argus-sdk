@@ -18,9 +18,13 @@ fn main() {
     #[cfg(target_os = "linux")]
     println!("cargo:rustc-link-lib=argus");
 
-    // Generate bindings
+    // Generate bindings. The two C enums are constified so their members are
+    // bare top-level constants (ARGUS_OK, ARGUS_INTERNAL_ERROR, ...), the form
+    // the wrapper code uses.
     let bindings = bindgen::Builder::default()
         .header("include/argus.h")
+        .constified_enum("ArgusErrorCode")
+        .constified_enum("ArgusEnvelopeState")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");

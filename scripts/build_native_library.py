@@ -94,16 +94,24 @@ def build_command(compiler: str, system: str, out: Path) -> list[str]:
     return [compiler, "-shared", "-O2", "-fPIC", "-o", name, str(SOURCE), "-lm"]
 
 
+def msvc_arch() -> str:
+    """The MSVC architecture label matching the running interpreter: the
+    library must load in the Python process that imports it, so an arm64
+    runner builds an arm64 library."""
+    return "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "amd64"
+
+
 def run_build(cmd: list[str], devcmd: Path | None, cwd: Path) -> subprocess.CompletedProcess:
     """Run the compiler, entering the MSVC environment first when required."""
     if devcmd is None:
         return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     # Enter the MSVC developer environment via a temporary batch file so the
-    # compiler sees INCLUDE and LIB.
+    # compiler sees INCLUDE and LIB, targeting the running architecture.
+    arch = msvc_arch()
     bat = cwd / "_build_native.bat"
     lines = [
         "@echo off",
-        f'call "{devcmd}" -arch=amd64 -host_arch=amd64 || exit /b 1',
+        f'call "{devcmd}" -arch={arch} -host_arch={arch} || exit /b 1',
         " ".join(cmd),
     ]
     bat.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
