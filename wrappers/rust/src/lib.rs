@@ -11,6 +11,13 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
 use std::ptr;
 
+// The wrapper code uses the bare C names for the two status constants it
+// checks; the constified bindings carry the enum-prefixed form.
+use self::{
+    ArgusErrorCode_ARGUS_INTERNAL_ERROR as ARGUS_INTERNAL_ERROR,
+    ArgusErrorCode_ARGUS_OK as ARGUS_OK,
+};
+
 /// Safety envelope operating state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvelopeState {
